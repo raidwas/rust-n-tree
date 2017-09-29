@@ -38,6 +38,11 @@ pub trait Region<P>: Clone {
 /// of attributes and quickly query for data that falls within a
 /// specific range.
 pub struct NTree<R, P> {
+    root: NTreeNode<R, P>,
+    bucket_limit: u8
+}
+
+struct NTreeNode<R, P>{
     region: R,
     kind: NTreeVariant<R, P>
 }
@@ -46,11 +51,10 @@ enum NTreeVariant<R, P> {
     /// A leaf of the tree, which contains points.
     Bucket {
         points: Vec<P>,
-        bucket_limit: u8
     },
     /// An interior node of the tree, which contains n subtrees.
     Branch {
-        subregions: Vec<NTree<R, P>>
+        subregions: Vec<NTreeNode<R, P>>
     }
 }
 
@@ -62,46 +66,21 @@ impl<P, R: Region<P>> NTree<R, P> {
     /// the arity of the tree.
     pub fn new(region: R, size: u8) -> NTree<R, P> {
         NTree {
-            kind: Branch {
-                subregions: region
-                    .split()
-                    .into_iter()
-                    .map(|r| NTree {
-                        region: r,
-                        kind: Bucket { points: vec![], bucket_limit: size }
-                    })
-                    .collect(),
+            root: NTreeNode{
+                region: region,
+                kind: Bucket {
+                    points: vec![]
+                },
             },
-            region: region
+            bucket_limit: size
         }
     }
 
     /// Insert a point into the n-tree, returns true if the point
     /// is within the n-tree and was inserted and false if not.
     pub fn insert(&mut self, point: P) -> bool {
-        if !self.region.contains(&point) { return false }
-        self.insert_helper(point)
-    }
-    ///Invariant: self.contains(&point) returns true
-    fn insert_helper(&mut self, point: P) -> bool {
-        match self.kind {
-            Bucket { ref mut points, ref bucket_limit } => {
-                if points.len() as u8 != *bucket_limit {
-                    points.push(point);
-                    return true
-                }
-            },
-            Branch { ref mut subregions } => {
-                match subregions.iter_mut().find(|r| r.contains(&point)) {
-                    Some(ref mut subregion) => return subregion.insert(point),
-                    None => return false
-                }
-            }
-        };
-
-        // Bucket is full
-        split_and_insert(self, point);
-        true
+        if !self.root.region.contains(&point) { return false }
+        self.root.insert(point, self.bucket_limit)
     }
 
     /// Get all the points which within the queried region.
@@ -109,26 +88,58 @@ impl<P, R: Region<P>> NTree<R, P> {
     /// Finds all points which are located in regions overlapping
     /// the passed in region, then filters out all points which
     /// are not strictly within the region.
+
     pub fn range_query<'t, 'q>(&'t self, query: &'q R) -> RangeQuery<'t, 'q, R, P> {
         RangeQuery {
             query: query,
             points: (&[]).iter(),
-            stack: vec![ref_slice::ref_slice(self).iter()],
+            stack: vec![ref_slice::ref_slice(&self.root).iter()],
         }
     }
 
     /// Is the point contained in the n-tree?
     pub fn contains(&self, point: &P) -> bool {
-        self.region.contains(point)
+        self.root.contains(point)
     }
+
 
     /// Get all the points nearby a specified point.
     ///
     /// This will return no more than bucket_limit points.
     pub fn nearby<'a>(&'a self, point: &P) -> Option<&'a[P]> {
+        self.root.nearby(point)
+    }
+}
+
+impl<P, R: Region<P>> NTreeNode<R, P> {
+    /// Insert a point into the n-tree-node, returns true if the point
+    /// is within the n-tree and was inserted and false if not.
+    fn insert(&mut self, point: P, bucket_limit: u8) -> bool {
+        if !self.region.contains(&point) { return false }
+        match self.kind {
+            Bucket { ref mut points} => {
+                if points.len() as u8 != bucket_limit {
+                    points.push(point);
+                    return true
+                }
+            },
+            Branch { ref mut subregions } => {
+                match subregions.iter_mut().find(|r| r.contains(&point)) {
+                    Some(ref mut subregion) => return subregion.insert(point, bucket_limit),
+                    None => return false
+                }
+            }
+        };
+
+        // Bucket is full
+        split_and_insert(self, point, bucket_limit);
+        true
+    }
+
+    fn nearby<'a>(&'a self, point: &P) -> Option<&'a[P]> {
         if self.region.contains(point) {
             match self.kind {
-                Bucket { ref points, .. } => Some(points.as_slice()),
+                Bucket { ref points } => Some(points.as_slice()),
                 Branch { ref subregions } => {
                     subregions
                         .iter()
@@ -140,31 +151,40 @@ impl<P, R: Region<P>> NTree<R, P> {
             None
         }
     }
+    /// Is the point contained in the n-tree?
+    fn contains(&self, point: &P) -> bool {
+        self.region.contains(point)
+    }
 }
 
-fn split_and_insert<P, R: Region<P>>(bucket: &mut NTree<R, P>, point: P) {
+fn split_and_insert<P, R: Region<P>>(node: &mut NTreeNode<R, P>, point: P, bucket_limit: u8) {
     let old_points;
-    let old_bucket_limit;
-
-    match bucket.kind {
-        // Get the old region, points, and bucket limit.
-        Bucket { ref mut points, bucket_limit } => {
+    match node.kind {
+        // Get the old points.
+        Bucket { ref mut points } => {
             old_points = mem::replace(points, vec![]);
-            old_bucket_limit = bucket_limit;
         },
         Branch { .. } => unreachable!()
     }
 
     // Replace the bucket with a split branch.
-    *bucket = NTree::new(bucket.region.clone(), old_bucket_limit);
+    node.kind = Branch { subregions: node.region
+        .split()
+        .into_iter()
+        .map(|r| NTreeNode {
+            region: r,
+            kind: Bucket { points: vec![] }
+        })
+        .collect()
+    };
 
     // Insert all the old points into the right place.
     for old_point in old_points.into_iter() {
-        bucket.insert(old_point);
+        node.insert(old_point, bucket_limit);
     }
 
     // Finally, insert the new point.
-    bucket.insert(point);
+    node.insert(point, bucket_limit);
 }
 
 /// An iterator over the points within a region.
@@ -176,7 +196,7 @@ fn split_and_insert<P, R: Region<P>>(bucket: &mut NTree<R, P>, point: P) {
 pub struct RangeQuery<'t,'q, R: 'q + 't, P: 't> {
     query: &'q R,
     points: slice::Iter<'t, P>,
-    stack: Vec<slice::Iter<'t, NTree<R, P>>>
+    stack: Vec<slice::Iter<'t, NTreeNode<R, P>>>
 }
 
 impl<'t, 'q, R: Region<P>, P> Iterator for RangeQuery<'t, 'q, R, P> {

@@ -80,7 +80,10 @@ impl<P, R: Region<P>> NTree<R, P> {
     /// is within the n-tree and was inserted and false if not.
     pub fn insert(&mut self, point: P) -> bool {
         if !self.region.contains(&point) { return false }
-
+        self.insert_helper(point)
+    }
+    ///Invariant: self.contains(&point) returns true
+    fn insert_helper(&mut self, point: P) -> bool {
         match self.kind {
             Bucket { ref mut points, ref bucket_limit } => {
                 if points.len() as u8 != *bucket_limit {

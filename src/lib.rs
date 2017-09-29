@@ -44,7 +44,7 @@ pub struct NTree<R, P> {
 
 struct NTreeNode<R, P>{
     region: R,
-    kind: NTreeVariant<R, P>
+    kind: NTreeVariant<R, P>,
 }
 
 enum NTreeVariant<R, P> {
@@ -115,27 +115,32 @@ impl<P, R: Region<P>> NTreeNode<R, P> {
     /// Insert a point into the n-tree-node, returns true if the point
     /// is within the n-tree and was inserted and false if not.
     fn insert(&mut self, point: P, bucket_limit: u8) -> bool {
-        if !self.region.contains(&point) { return false }
-        match self.kind {
-            Bucket { ref mut points} => {
-                if points.len() as u8 != bucket_limit {
-                    points.push(point);
-                    return true
-                }
-            },
-            Branch { ref mut subregions } => {
-                match subregions.iter_mut().find(|r| r.contains(&point)) {
-                    Some(ref mut subregion) => return subregion.insert(point, bucket_limit),
-                    None => return false
+        {
+            let mut current_kind = &mut self.kind;
+            loop{
+                match {current_kind} {
+                    &mut Bucket { ref mut points } => {
+                        if points.len() as u8 != bucket_limit {
+                            points.push(point);
+                            return true;
+                        }else{
+                            break;
+                        }
+                    },
+                    &mut Branch { ref mut subregions } => {
+                        current_kind = &mut subregions
+                            .iter_mut()
+                            .find(|node| node.region.contains(&point))
+                            .unwrap() //does always exist, due to invariant of R.split()
+                            .kind;
+                    }
                 }
             }
-        };
-
+        }
         // Bucket is full
         split_and_insert(self, point, bucket_limit);
         true
     }
-
     fn nearby<'a>(&'a self, point: &P) -> Option<&'a[P]> {
         if self.region.contains(point) {
             match self.kind {

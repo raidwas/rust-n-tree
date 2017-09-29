@@ -116,31 +116,31 @@ impl<P, R: Region<P>> NTreeNode<R, P> {
     /// Insert a point into the n-tree-node, returns true if the point
     /// is within the n-tree and was inserted and false if not.
     fn insert(&mut self, point: P, bucket_limit: u8) -> bool {
-        {
-            let mut current_kind = &mut self.kind;
-            loop{
-                match {current_kind} {
-                    &mut Bucket { ref mut points } => {
-                        if points.len() as u8 != bucket_limit {
-                            points.push(point);
-                            return true;
-                        }else{
-                            break;
-                        }
-                    },
-                    &mut Branch { ref mut subregions } => {
-                        current_kind = &mut subregions
-                            .iter_mut()
-                            .find(|node| node.region.contains(&point))
-                            .unwrap() //does always exist, due to invariant of R.split()
-                            .kind;
+        let mut current_node = self;
+        loop{
+            match {current_node} {
+                &mut NTreeNode {region: _, kind: Branch { ref mut subregions }} => {
+                    current_node = subregions
+                        .iter_mut()
+                        .find(|sub_node| sub_node.region.contains(&point))
+                        .unwrap(); //does always exist, due to invariant of R.split()
+                },
+                mut node  => {
+                    match node {
+                        &mut NTreeNode {region: _, kind: Bucket {ref mut points}} => {
+                            if points.len() as u8 != bucket_limit {
+                                points.push(point);
+                                return true;
+                            }
+                        },
+                        _ => unreachable!()
                     }
+                    // Bucket is full
+                    split_and_insert(&mut node, point, bucket_limit);
+                    return true;
                 }
             }
         }
-        // Bucket is full
-        split_and_insert(self, point, bucket_limit);
-        true
     }
     ///Asumes that the point is contained in the tree.
     ///Therefore it always returns a bucket, and does not need Option in the return type.

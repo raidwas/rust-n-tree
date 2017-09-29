@@ -11,7 +11,7 @@ use self::test::Bencher;
 use self::rand::{random, XorShiftRng, Rng};
 
 use self::fixtures::{QuadTreeRegion, Vec2};
-use {NTree, Region};
+use {NTree};
 
 #[test]
 fn test_contains() {

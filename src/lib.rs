@@ -107,7 +107,8 @@ impl<P, R: Region<P>> NTree<R, P> {
     ///
     /// This will return no more than bucket_limit points.
     pub fn nearby<'a>(&'a self, point: &P) -> Option<&'a[P]> {
-        self.root.nearby(point)
+        if !self.root.region.contains(&point) { return None }
+        Some(self.root.nearby(point))
     }
 }
 
@@ -141,19 +142,22 @@ impl<P, R: Region<P>> NTreeNode<R, P> {
         split_and_insert(self, point, bucket_limit);
         true
     }
-    fn nearby<'a>(&'a self, point: &P) -> Option<&'a[P]> {
-        if self.region.contains(point) {
-            match self.kind {
-                Bucket { ref points } => Some(points.as_slice()),
-                Branch { ref subregions } => {
-                    subregions
+    ///Asumes that the point is contained in the tree.
+    ///Therefore it always returns a bucket, and does not need Option in the return type.
+    fn nearby<'a>(&'a self, point: &P) -> &'a[P] {
+        let mut current_kind = & self.kind;
+        loop {
+            match {current_kind} {
+                & Bucket { ref points } => { return points.as_slice(); },
+                & Branch { ref subregions } => {
+                    current_kind = & subregions
                         .iter()
                         .find(|r| r.contains(point))
-                        .and_then(|r| r.nearby(point))
+                        .unwrap() //does always exist, due to invariant of R.split()
+                        .kind;
+
                 }
             }
-        } else {
-            None
         }
     }
     /// Is the point contained in the n-tree?

@@ -1,6 +1,7 @@
 #![deny(missing_docs)]
 #![cfg_attr(test, deny(warnings))]
-#![cfg_attr(feature = "bench", feature(test))]
+#![cfg_attr(test, feature(test))]
+#![cfg_attr(test, feature(rand))]
 
 
 //! A generic, n-dimensional quadtree for fast neighbor lookups on multiple axes.

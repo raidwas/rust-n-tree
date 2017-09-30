@@ -1,14 +1,10 @@
-#[cfg(feature = "bench")]
 extern crate rand;
 
-#[cfg(feature = "bench")]
 extern crate test;
 
-#[cfg(feature = "bench")]
 use self::test::Bencher;
 
-#[cfg(feature = "bench")]
-use self::rand::{random, XorShiftRng, Rng};
+use self::rand::{XorShiftRng, Rng};
 
 use self::fixtures::{QuadTreeRegion, Vec2};
 use {NTree};
@@ -82,9 +78,9 @@ fn test_range_query() {
                     Vec2 { x: 60.0, y: 20.0 }]);
 }
 
-#[cfg(feature = "bench")]
+
 fn range_query_bench(b: &mut Bencher, n: usize) {
-    let mut rng: XorShiftRng = random();
+    let mut rng = XorShiftRng::new_unseeded();
 
     let mut ntree = NTree::new(QuadTreeRegion::square(0.0, 0.0, 1.0), 4);
     for _ in 0..n {
@@ -102,23 +98,45 @@ fn range_query_bench(b: &mut Bencher, n: usize) {
         for p in ntree.range_query(&r) { test::black_box(p); }
     })
 }
-
-#[cfg(feature = "bench")]
 #[bench]
 fn bench_range_query_small(b: &mut Bencher) {
     range_query_bench(b, 10);
 }
 
-#[cfg(feature = "bench")]
 #[bench]
 fn bench_range_query_medium(b: &mut Bencher) {
     range_query_bench(b, 100);
 }
 
-#[cfg(feature = "bench")]
 #[bench]
 fn bench_range_query_large(b: &mut Bencher) {
     range_query_bench(b, 10000);
+}
+
+
+fn insert_bench(b: &mut Bencher, n: usize) {
+    let mut rng = XorShiftRng::new_unseeded();
+    b.iter(|| {
+        let mut ntree = NTree::new(QuadTreeRegion::square(0.0, 0.0, 1.0), 4);
+        for _ in 0..n {
+            ntree.insert(Vec2 { x: rng.gen(), y: rng.gen() });
+        }
+    })
+}
+
+#[bench]
+fn bench_insert_small(b: &mut Bencher) {
+    insert_bench(b, 10);
+}
+
+#[bench]
+fn bench_insert_medium(b: &mut Bencher) {
+    insert_bench(b, 100);
+}
+
+#[bench]
+fn bench_insert_large(b: &mut Bencher) {
+    insert_bench(b, 10000);
 }
 
 mod fixtures {

@@ -2,6 +2,7 @@
 #![cfg_attr(test, deny(warnings))]
 #![cfg_attr(feature = "bench", feature(test))]
 
+
 //! A generic, n-dimensional quadtree for fast neighbor lookups on multiple axes.
 
 extern crate ref_slice;
@@ -126,8 +127,8 @@ impl<P, R: Region<P>> NTreeNode<R, P> {
                         .unwrap(); //does always exist, due to invariant of R.split()
                 },
                 mut node  => {
-                    match node {
-                        &mut NTreeNode {region: _, kind: Bucket {ref mut points}} => {
+                    match node.kind {
+                        Bucket {ref mut points} => {
                             if points.len() as u8 != bucket_limit {
                                 points.push(point);
                                 return true;
